@@ -64,7 +64,7 @@ contains
         end if
     end subroutine
 
-    subroutine parse(self, infix)
+    function parse(self, infix) result(ans)
         class(Parser) :: self
         character(*) :: infix
         type(List) :: tokens
@@ -80,7 +80,8 @@ contains
             write(error_unit,*) 'Unmatched parenthesis on: '//infix
             stop
         end if
-    end subroutine
+        ans = output % pop()
+    end function
 
     subroutine tokenize_input(self, from, tokens)
         class(Parser) :: self
@@ -147,12 +148,13 @@ contains
             token = tokens % get(i)
             ! Is a registered function?
             if (is_function(token)) then
+                print*, "push function"
                 ! Push into operator stack
                 call operators % append(token)
             ! Is a valid operand: number or variable name?
             else if (is_operand(token)) then
-                ! Push into output queue
                 print*, "add to output", ListItem(token)
+                ! Push into output queue
                 call postfix % append(token)
             ! Is a open paren.
             else if (is_open_paren(token)) then
@@ -174,8 +176,8 @@ contains
 
                 top = operators % pop()
                 print*, '... found parenthesis'
-            ! Is a registered operator
-            else !if (is_operator(token)) then
+
+            else ! Is a registered operator
                 print*, "adding operator: ", ListItem(token)
                 do while (size(operators) > 0)
                     top = operators % peek()
@@ -238,7 +240,6 @@ contains
             end if
             print*, 'token: ', ListItem(token), 'output: ', output
         end do
-        token = output % pop()
     end subroutine
 
     integer function priority(input)

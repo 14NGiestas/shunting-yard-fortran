@@ -2,6 +2,7 @@ program main
     use parser_module
     implicit none
     type(Parser) :: p
+    class(*), allocatable :: ans
 
     call p % register_function(["sin ", "sqrt"])
     call p % register_operator(["+","-","*","/"])
@@ -11,7 +12,10 @@ program main
     p % on_function => on_function
     p % on_operand  => on_operand
 
-    call p % parse("sqrt(2)*sin(pi/4) + 3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3")
+    ans = p % parse("sqrt(2)*sin(pi/4) + 3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3")
+    select type(ans); type is (real)
+        print*, ans
+    end select
 
 contains
 
@@ -21,6 +25,7 @@ contains
         class(*), optional :: lhs
         class(*), optional :: rhs
         class(*), allocatable :: ans
+
         select type(opr)
         type is (character(*))
             select case(opr)
