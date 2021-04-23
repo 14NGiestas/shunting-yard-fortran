@@ -30,7 +30,7 @@ fpm run
 
 In the example program provided in `app/main.f90` you will find the basic usage of this package.
 
-```
+```fortran
 program main
     use parser_module
     implicit none
@@ -94,11 +94,8 @@ contains
         class(*), optional :: lhs
         class(*), optional :: rhs
         class(*), allocatable :: ans
-        character(1024) :: tmp
         real :: lhs_val, rhs_val
-        integer :: info
 
-        info = 0
         select type(lhs)
         type is (real)
             lhs_val = lhs
