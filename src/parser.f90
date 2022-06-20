@@ -6,13 +6,14 @@ module parser_module
     private
 
     type, public :: Parser
-        procedure(EventInterface), pointer :: on_function => null()
-        procedure(EventInterface), pointer :: on_operator => null()
-        procedure(EventInterface), pointer :: on_operand  => null()
+        procedure(interface_on_function), pointer :: on_function => null()
+        procedure(interface_on_operator), pointer :: on_operator => null()
+        procedure(interface_on_operand),  pointer :: on_operand  => null()
     contains
         procedure :: parse
         procedure, nopass :: register_function
         procedure, nopass :: register_operator
+        procedure, nopass :: ignore_tokens
         procedure, nopass :: is_enclosed
         procedure, private :: tokenize_input
         procedure, private :: convert_to_RPN
@@ -20,16 +21,32 @@ module parser_module
     end type
 
     abstract interface
-        function EventInterface(self, lhs, opr, rhs) result(ans)
+        function interface_on_operator(self, lhs, opr, rhs) result(ans)
+            import :: Parser
+            class(Parser)  :: self
+            class(*) :: lhs
+            class(*) :: opr
+            class(*) :: rhs
+            class(*), allocatable :: ans
+        end function
+
+        function interface_on_operand(self, opr) result(ans)
             import :: Parser
             class(Parser)  :: self
             class(*) :: opr
-            class(*), optional :: lhs
-            class(*), optional :: rhs
+            class(*), allocatable :: ans
+        end function
+
+        function interface_on_function(self, fun, arg) result(ans)
+            import :: Parser
+            class(Parser)  :: self
+            class(*) :: fun
+            class(*) :: arg
             class(*), allocatable :: ans
         end function
     end interface
 
+    character(:), allocatable :: REGISTERED_IGNORED(:)
     character(:), allocatable :: REGISTERED_FUNCTIONS(:)
     character(:), allocatable :: REGISTERED_OPERATORS(:)
     character(:), allocatable :: REGISTERED_RIGHT_ASSOC(:)
@@ -64,6 +81,15 @@ contains
         end if
     end subroutine
 
+    subroutine ignore_tokens(ignored_names)
+        character(*) :: ignored_names(:)
+        if (allocated(REGISTERED_IGNORED)) then
+            REGISTERED_IGNORED = [REGISTERED_IGNORED, ignored_names]
+        else
+            REGISTERED_IGNORED = [ignored_names]
+        end if
+    end subroutine
+
     function parse(self, infix) result(ans)
         class(Parser) :: self
         character(*) :: infix
@@ -94,7 +120,12 @@ contains
 
         ! Sanitization
         infix = replace(from,'**','^')
-        infix = replace(infix,' ','')
+        ! Ignore whitespace by default
+        if (.not. allocated(REGISTERED_IGNORED)) REGISTERED_IGNORED = [" ", new_line(' ')]
+        ! Ignored tokens
+        do i=1,size(REGISTERED_IGNORED)
+            infix = replace(infix, REGISTERED_IGNORED(i), '')
+        end do
 
         delta = 0
         i = 1
@@ -148,37 +179,31 @@ contains
             token = tokens % get(i)
             ! Is a registered function?
             if (is_function(token)) then
-                print*, "push function"
                 ! Push into operator stack
                 call operators % append(token)
             ! Is a valid operand: number or variable name?
             else if (is_operand(token)) then
-                print*, "add to output", ListItem(token)
                 ! Push into output queue
                 call postfix % append(token)
             ! Is a open paren.
             else if (is_open_paren(token)) then
-                print*, "push parenthesis"
+                ! Push parenthesis
                 call operators % append(token)
             ! Is a close paren.
             else if (is_close_paren(token)) then
-                print*, 'popping to parenthesis'
+                ! Pop parenthesis
                 do
                     top = operators % peek()
                     if (.not. is_open_paren(top)) then
                         call postfix % append(top)
                         top = operators % pop()
-                        print*, "... popped ", ListItem(top), "to output"
                     else
                         exit
                     end if
                 end do
 
                 top = operators % pop()
-                print*, '... found parenthesis'
-
             else ! Is a registered operator
-                print*, "adding operator: ", ListItem(token)
                 do while (size(operators) > 0)
                     top = operators % peek()
                     if (.not. is_open_paren(top) &
@@ -188,28 +213,22 @@ contains
                             (is_right_assoc(token) .and. priority(token) < priority(top)) &
                         ) &
                     ) then
+                        ! Pop operator to output"
                         call postfix % append(top)
                         top = operators % pop()
-                        print*, "... popped operator ", ListItem(top), " to output"
                     else
                         exit
                     end if
                 end do
                 call operators % append(token)
             end if
-            print*, '   output: ', postfix
-            print*, '   stack:  ', operators
         end do
 
-        print*, "transfering tokens from stack to output"
         ! Pop all remaining operators
-        do while (size(operators) > 0)
+        do i=1,size(operators)
             top = operators % pop()
             call postfix % append(top)
         end do
-
-        print*, postfix
-
     end subroutine
 
     subroutine eval_expression(self, postfix, output)
@@ -217,7 +236,7 @@ contains
         type(List), intent(in out) :: postfix
         type(List), intent(out) :: output
         class(*), allocatable :: token
-        class(*), allocatable :: op1, op2
+        class(*), allocatable :: op1, op2, ret
         integer :: i
 
         do i=1,size(postfix)
@@ -225,20 +244,24 @@ contains
             if (is_function(token)) then
                 ! Pop the first operand
                 op1 = output % pop()
+                ! Evaluate the return
+                ret = self % on_function(token, op1)
                 ! Put result back in the stack
-                call output % append(self % on_function(opr=token,rhs=op1))
+                call output % append(ret)
             else if (is_operand(token)) then
+                ret = self % on_operand(token)
                 ! Convert operand string into a actual operand
-                call output % append(self % on_operand(opr=token))
+                call output % append(ret)
             else if (is_operator(token)) then
                 ! Pop the first operand
                 op1 = output % pop()
                 ! Pop the second operand
                 op2 = output % pop()
+                !
+                ret = self % on_operator(op2,token,op1)
                 ! Perform operation
-                call output % append(self % on_operator(lhs=op2,opr=token,rhs=op1))
+                call output % append(ret)
             end if
-            print*, 'token: ', ListItem(token), 'output: ', output
         end do
     end subroutine
 

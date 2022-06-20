@@ -1,6 +1,9 @@
-name="shunting-yard-parser"
-version="0.0.1"
+name="shunting-yard-fortran"
+version="0.0.2"
 license="MIT"
 author="Ian Giestas Pauli"
 maintainer = "iangiestas@usp.br"
 copyright = "2020 Ian Giestas Pauli"
+
+[ library ]
+include-dir = "include"

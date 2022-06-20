@@ -21,21 +21,22 @@ contains
         integer, intent(in)  :: v_list(:)
         integer, intent(out) :: iostat
         character(*), intent(inout) :: iomsg
-        character(200) :: buffer
 
         select type(it => self % content)
         type is (character(*))
-            print '(A)', it
+            write(unit,'("''",g0,"''")') it
         type is (real)
-            write(buffer,*) it
-            print '(A)', trim(adjustl(trim(buffer)))
+            write(unit,'(g0)') it
         type is (complex)
-            write(buffer,*) it
-            print '(A)', trim(adjustl(trim(buffer)))
+            write(unit,'(g0)') it
         type is (integer)
-            print '(I0)', it
+            write(unit,'(g0)') it
+        class is (None)
+            write(unit,'("None")')
+        !class is (ListItem)
+        !    write(unit,'(g0)') ListItem(it % content)
         class default
-            print '("[DERIVED TYPE ",I0,"]")', sizeof(it)
+            write(unit,'("[DERIVED TYPE ",I0,"]")') sizeof(it)
         end select
     end subroutine
 

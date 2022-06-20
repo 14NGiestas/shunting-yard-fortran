@@ -16,6 +16,9 @@ module parser_list
         generic, public :: write(formatted) => write
     end type
 
+    interface size
+        module procedure list_size
+    end interface
     public :: size
 
 contains
@@ -24,9 +27,10 @@ contains
         class(List) :: self
         class(*) :: item
 
-        if (self % is_empty()) then
+        if (.not. allocated(self % items)) then
             self % items = [ ListItem(item) ]
         else
+            self % items = self % items(:self % num_items)
             self % items = [ self % items, ListItem(item) ]
         end if
 
@@ -41,6 +45,7 @@ contains
     end function
 
     function pop(self)
+        use iso_fortran_env
         class(List) :: self
         class(*), allocatable :: pop
 
@@ -49,8 +54,7 @@ contains
             return
         end if
 
-        pop  = self % items(self % num_items) % content
-        self % items = [ self % items(:self%num_items-1) ]
+        pop = self % peek()
         self % num_items = self % num_items - 1
     end function
 
@@ -66,12 +70,12 @@ contains
 
     logical function is_empty(self)
         class(List) :: self
-        is_empty = .not. allocated(self % items)
+        is_empty = self % num_items == 0
     end function
 
-    integer function size(self)
+    integer function list_size(self)
         class(List) :: self
-        size = self % num_items
+        list_size = self % num_items
     end function
 
     subroutine clear(self)
@@ -88,9 +92,13 @@ contains
         character(*), intent(inout) :: iomsg
         integer :: i
 
-        do i=1,size(self)
-            print '(DT)', ListItem(self % items(i) % content)
-            if (i < size(self)) print*, ' '
-        end do
+        write(unit,'("[")')
+        if (size(self) > 0) then
+            do i=1,size(self)-1
+                write(unit,'(DT,", ")') self % items(i)
+            end do
+            write(unit,'(DT)') self % items(i)
+        end if
+        write(unit,'("]")')
     end subroutine
 end module
