@@ -1,10 +1,11 @@
-module derived_type
+module derived_type_and_intrinsics
 
     type :: aritimetic_t
         integer :: numerator
         integer :: denominator
+        real, allocatable :: pure_evil(:)
     contains
-        procedure :: multiply
+        procedure, pass(rhs) :: multiply
         procedure :: subtract
         procedure :: addition
         procedure :: division
@@ -17,11 +18,21 @@ module derived_type
 contains
 
     function multiply(lhs, rhs) result(ans)
-        class(aritimetic_t), intent(in) :: lhs
-        type(aritimetic_t),  intent(in) :: rhs
+        class(*),            intent(in) :: lhs
+        class(aritimetic_t), intent(in) :: rhs
         type(aritimetic_t)              :: ans
-        ans % numerator   = lhs % numerator   * rhs % numerator
-        ans % denominator = lhs % denominator * rhs % denominator
+        select type(lhs)
+        type is (real)
+            ans % pure_evil   = [ lhs, rhs % pure_evil ]
+            ans % numerator   = lhs * rhs % numerator
+            ans % denominator = rhs % denominator
+        type is (aritimetic_t)
+            ans % pure_evil   = [ lhs % pure_evil, rhs % pure_evil ]
+            ans % numerator   = lhs % numerator   * rhs % numerator
+            ans % denominator = lhs % denominator * rhs % denominator
+        class default
+            error stop "multiply: something else"
+        end select
     end function
 
     function division(lhs, rhs) result(ans)
@@ -29,6 +40,7 @@ contains
         type(aritimetic_t),  intent(in) :: rhs
         type(aritimetic_t)              :: ans
 
+        ans % pure_evil   = [ lhs % pure_evil, rhs % pure_evil ]
         ans % numerator   = lhs % numerator   * rhs % denominator
         ans % denominator = lhs % denominator * rhs % numerator
     end function
@@ -38,6 +50,7 @@ contains
         type(aritimetic_t),  intent(in) :: rhs
         type(aritimetic_t)              :: ans
 
+        ans % pure_evil   = [ lhs % pure_evil, rhs % pure_evil ]
         ans % numerator   = lhs % numerator   * rhs % denominator &
                           + lhs % denominator * rhs % numerator
         ans % denominator = lhs % denominator * rhs % denominator
@@ -48,6 +61,7 @@ contains
         type(aritimetic_t),  intent(in) :: rhs
         type(aritimetic_t)              :: ans
 
+        ans % pure_evil   = [ lhs % pure_evil, rhs % pure_evil ]
         ans % numerator   = lhs % numerator   * rhs % denominator &
                           - lhs % denominator * rhs % numerator
         ans % denominator = lhs % denominator * rhs % denominator
@@ -55,9 +69,9 @@ contains
 
 end module
 
-program test_derived_type
+program test_derived_type_and_intrinsics
     use parser_module
-    use derived_type
+    use derived_type_and_intrinsics
     use iso_fortran_env
     implicit none
 
@@ -70,12 +84,14 @@ program test_derived_type
     p % on_function => on_function
     p % on_operand  => on_operand
 
-    print '(a)', "test_derived_type"
-    print '(a)', "5/3*4+3/2"
-    ret = p % parse("5/3*4+3/2")
+    print '(a)', "test_derived_type_and_intrinsics"
+
+    print '(a)', "5/3*4.0+3/2"
+    ret = p % parse("5/3*4.0+3/2")
     select type(ret)
     type is (aritimetic_t)
-        print*, ret
+        print '("=", g0, "/", g0)', ret % numerator, ret % denominator
+        print *, ret % pure_evil
         print*, real(ret % numerator,   kind=REAL64) &
               / real(ret % denominator, kind=REAL64)
         print*, 5.0d0/3.0d0*4.0d0+3.0d0/2.0d0
@@ -85,7 +101,8 @@ program test_derived_type
     ret = p % parse("57/311*433+39/27")
     select type(ret)
     type is (aritimetic_t)
-        print*, ret
+        print '("=", g0, "/", g0)', ret % numerator, ret % denominator
+        print *, ret % pure_evil
         print*, real(ret % numerator,   kind=REAL64) &
               / real(ret % denominator, kind=REAL64)
         print*, 57.d0/311.d0*433.d0+39.d0/27.d0
@@ -95,7 +112,8 @@ program test_derived_type
     ret = p % parse("2/3*4+3/2")
     select type(ret)
     type is (aritimetic_t)
-        print*, ret
+        print '("=", g0, "/", g0)', ret % numerator, ret % denominator
+        print *, ret % pure_evil
         print*, real(ret % numerator,   kind=REAL64) &
               / real(ret % denominator, kind=REAL64)
         print*, 5.0d0/3.0d0*4.0d0+3.0d0/2.0d0
@@ -110,16 +128,26 @@ contains
 
         select type(opr)
         type is (character(*))
-            block
+            if (scan(opr,'.') > 0) then
+                block
                 integer :: info
-                integer :: value
+                real(REAL64) :: value
+                type(aritimetic_t) :: fract
+                read(opr,*,iostat=info) value
+                if (info == 0) allocate(ans, source=value)
+                end block
+            else
+                block
+                integer :: info
+                integer(INT64) :: value
                 type(aritimetic_t) :: fract
 
                 read(opr,*,iostat=info) value
 
-                fract = aritimetic_t(value, 1)
+                fract = aritimetic_t(value, 1, [ value ])
                 if (info == 0) allocate(ans, source=fract)
-            end block
+                end block
+            end if
         end select
     end function
 

@@ -1,4 +1,4 @@
-program main
+program test_benchmark
     use parser_module
     use parser_listitem
     implicit none
@@ -6,7 +6,7 @@ program main
 
     real :: t1, t0, ans
     integer :: file_size
-    character(:), allocatable :: buffer
+    character(:), allocatable :: filename, buffer
 
     type(Parser) :: p
     class(*), allocatable :: ret
@@ -20,29 +20,32 @@ program main
     p % on_function => on_function
     p % on_operand  => on_operand
 
+    filename = "include/big-simple-expression.inc"
 
-    open(unit=404, file="include/big-simple-expression.inc", &
-        form='unformatted', access='stream', status='old')
-    inquire(file="include/big-simple-expression.inc",size=file_size)
-    print*, file_size
+    print '(a)', "test_benchmark"
+
+    open(unit=404, file=filename, form='unformatted', access='stream', status='old')
+    inquire(file=filename, size=file_size)
     allocate(character(file_size) :: buffer)
     read(404) buffer
+
+    print '("Loaded file ", a, " with size ", g0)', filename, file_size
 
     call cpu_time(t0)
     ret = p % parse(buffer)
     call cpu_time(t1)
-    print*, "Time spent ", t1 - t0
+    print '("Time spent to parse file ", g0)', t1 - t0
     select type(ret)
     type is (real)
-        print*, ret
+        print '("Value returned: ", g0)', ret
     end select
 
     call cpu_time(t0)
     ans = &
     include 'big-simple-expression.inc'
     call cpu_time(t1)
-    print*, "Time spent ", t1 - t0
-    print*, ans
+    print '("Time spent to parse file ", g0)', t1 - t0
+    print '("Value returned: ", g0)', ans
 
 contains
 
