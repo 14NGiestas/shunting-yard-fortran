@@ -1,7 +1,7 @@
 module parser_module
     use iso_fortran_env
     use parser_list
-    use parser_listitem
+    use parser_list_node
     implicit none
     private
 
@@ -9,6 +9,7 @@ module parser_module
         procedure(interface_on_function), pointer :: on_function => null()
         procedure(interface_on_operator), pointer :: on_operator => null()
         procedure(interface_on_operand),  pointer :: on_operand  => null()
+        procedure(interface_on_debug_print),  pointer :: on_debug => null()
     contains
         procedure :: parse
         procedure, nopass :: register_function
@@ -21,6 +22,12 @@ module parser_module
     end type
 
     abstract interface
+        subroutine interface_on_debug_print(self, thing)
+            import :: Parser
+            class(Parser)  :: self
+            class(*) :: thing
+        end subroutine
+
         function interface_on_operator(self, lhs, opr, rhs) result(ans)
             import :: Parser
             class(Parser)  :: self
@@ -93,9 +100,9 @@ contains
     function parse(self, infix) result(ans)
         class(Parser) :: self
         character(*) :: infix
-        type(List) :: tokens
-        type(List) :: postfix
-        type(List) :: output
+        type(linked_list) :: tokens
+        type(linked_list) :: postfix
+        type(linked_list) :: output
         class(*), allocatable :: ans
 
         call self % tokenize_input(infix, tokens)
@@ -106,13 +113,13 @@ contains
             write(error_unit,*) 'Unmatched parenthesis on: '//infix
             stop
         end if
-        ans = output % pop()
+        ans = output % peek(); call output % pop()
     end function
 
     subroutine tokenize_input(self, from, tokens)
         class(Parser) :: self
         character(*), intent(in)  :: from
-        type(List),   intent(in out) :: tokens
+        type(linked_list),   intent(in out) :: tokens
         character(:), allocatable :: infix
         character(:), allocatable :: slice, next_char
         logical :: is_token, is_next_token
@@ -137,7 +144,7 @@ contains
             is_next_token = any(REGISTERED_OPERATORS == next_char) &
                   .or. scan(next_char,'()') > 0
             if (is_token .or. is_next_token) then
-                call tokens % append(slice)
+                call tokens % push(slice)
                 i = i + 1
                 if (is_next_token) i = i + delta
                 delta = 0
@@ -146,7 +153,7 @@ contains
             end if
         end do
         slice = infix(i:)
-        call tokens % append(slice)
+        call tokens % push(slice)
 
     contains
 
@@ -169,9 +176,9 @@ contains
 
     subroutine convert_to_RPN(self, tokens, postfix)
         class(Parser) :: self
-        type(List), intent(in)  :: tokens
-        type(List), intent(out) :: postfix
-        type(List) :: operators
+        type(linked_list), intent(in)  :: tokens
+        type(linked_list), intent(out) :: postfix
+        type(linked_list) :: operators
         class(*), allocatable :: token, top
         integer :: i
 
@@ -180,29 +187,29 @@ contains
             ! Is a registered function?
             if (is_function(token)) then
                 ! Push into operator stack
-                call operators % append(token)
+                call operators % push(token)
             ! Is a valid operand: number or variable name?
             else if (is_operand(token)) then
                 ! Push into output queue
-                call postfix % append(token)
+                call postfix % push(token)
             ! Is a open paren.
             else if (is_open_paren(token)) then
                 ! Push parenthesis
-                call operators % append(token)
+                call operators % push(token)
             ! Is a close paren.
             else if (is_close_paren(token)) then
                 ! Pop parenthesis
                 do
                     top = operators % peek()
                     if (.not. is_open_paren(top)) then
-                        call postfix % append(top)
-                        top = operators % pop()
+                        call postfix % push(top)
+                        top = operators % peek(); call operators % pop()
                     else
                         exit
                     end if
                 end do
 
-                top = operators % pop()
+                top = operators % peek(); call operators % pop()
             else ! Is a registered operator
                 do while (size(operators) > 0)
                     top = operators % peek()
@@ -214,27 +221,27 @@ contains
                         ) &
                     ) then
                         ! Pop operator to output"
-                        call postfix % append(top)
-                        top = operators % pop()
+                        call postfix % push(top)
+                        top = operators % peek(); call operators % pop()
                     else
                         exit
                     end if
                 end do
-                call operators % append(token)
+                call operators % push(token)
             end if
         end do
 
         ! Pop all remaining operators
         do i=1,size(operators)
-            top = operators % pop()
-            call postfix % append(top)
+            top = operators % peek(); call operators % pop()
+            call postfix % push(top)
         end do
     end subroutine
 
     subroutine eval_expression(self, postfix, output)
         class(Parser) :: self
-        type(List), intent(in out) :: postfix
-        type(List), intent(out) :: output
+        type(linked_list), intent(in out) :: postfix
+        type(linked_list), intent(out) :: output
         class(*), allocatable :: token
         class(*), allocatable :: op1, op2, ret
         integer :: i
@@ -243,24 +250,25 @@ contains
             token = postfix % get(i)
             if (is_function(token)) then
                 ! Pop the first operand
-                op1 = output % pop()
+                op1 = output % peek(); call output % pop()
                 ! Evaluate the return
                 ret = self % on_function(token, op1)
                 ! Put result back in the stack
-                call output % append(ret)
+                call output % push(ret)
             else if (is_operand(token)) then
                 ret = self % on_operand(token)
                 ! Convert operand string into a actual operand
-                call output % append(ret)
+                call output % push(ret)
             else if (is_operator(token)) then
                 ! Pop the first operand
-                op1 = output % pop()
+                op1 = output % peek(); call output % pop()
                 ! Pop the second operand
-                op2 = output % pop()
+                op2 = output % peek(); call output % pop()
                 !
                 ret = self % on_operator(op2,token,op1)
+                call self % on_debug(ret)
                 ! Perform operation
-                call output % append(ret)
+                call output % push(ret)
             end if
         end do
     end subroutine
@@ -335,7 +343,7 @@ contains
     end function
 
     logical function is_enclosed(tokens)
-        type(List) :: tokens
+        type(linked_list) :: tokens
         class(*), allocatable :: token
         integer :: i,k
         is_enclosed = .false.

@@ -23,11 +23,22 @@ contains
         type(aritimetic_t)              :: ans
         select type(lhs)
         type is (real)
-            ans % pure_evil   = [ lhs, rhs % pure_evil ]
+            if (allocated(rhs % pure_evil)) then
+                ans % pure_evil = [ lhs, rhs % pure_evil ]
+            else
+                ans % pure_evil = [integer::]
+            end if
             ans % numerator   = lhs * rhs % numerator
             ans % denominator = rhs % denominator
         type is (aritimetic_t)
-            ans % pure_evil   = [ lhs % pure_evil, rhs % pure_evil ]
+            if (allocated(lhs % pure_evil) &
+          .and. allocated(rhs % pure_evil)) then
+                ans % pure_evil   = [ lhs % pure_evil, rhs % pure_evil ]
+            else if (allocated(lhs % pure_evil)) then
+                ans % pure_evil = lhs % pure_evil
+            else
+                ans % pure_evil = rhs % pure_evil
+            end if
             ans % numerator   = lhs % numerator   * rhs % numerator
             ans % denominator = lhs % denominator * rhs % denominator
         class default
@@ -83,6 +94,7 @@ program test_derived_type_and_intrinsics
     p % on_operator => on_operator
     p % on_function => on_function
     p % on_operand  => on_operand
+    p % on_debug    => on_debug
 
     print '(a)', "test_derived_type_and_intrinsics"
 
@@ -120,6 +132,18 @@ program test_derived_type_and_intrinsics
     end select
 
 contains
+
+    subroutine on_debug(self, thing)
+        class(Parser)  :: self
+        class(*) :: thing
+        select type(thing)
+        type is (aritimetic_t)
+            print*, '----- de bug -----'
+            print*, thing % numerator
+            print*, thing % denominator
+            print*, thing % pure_evil
+        end select
+    end subroutine
 
     function on_operand(self, opr) result(ans)
         class(Parser) :: self
@@ -181,20 +205,36 @@ contains
         select type(lhs)
         type is (aritimetic_t)
             lhs_val = lhs
+        type is (real(REAL32))
+            print*, 'REAL32 lhs here'
+            lhs_val = aritimetic_t(int(lhs), 1)
+        type is (real(REAL64))
+            print*, 'REAL64 lhs here'
+            lhs_val = aritimetic_t(int(lhs), 1)
+        class default
+            error stop
         end select
 
         select type(rhs)
         type is (aritimetic_t)
             rhs_val = rhs
+        type is (real(REAL32))
+            print*, 'REAL32 rhs here'
+            rhs_val = aritimetic_t(int(rhs), 1)
+        type is (real(REAL64))
+            print*, 'REAL64 rhs here'
+            rhs_val = aritimetic_t(int(rhs), 1)
+        class default
+            error stop
         end select
 
         select type(opr)
         type is (character(*))
             select case(opr)
-            case('+'); allocate(ans, source=lhs_val+rhs_val)
-            case('-'); allocate(ans, source=lhs_val-rhs_val)
-            case('*'); allocate(ans, source=lhs_val*rhs_val)
-            case('/'); allocate(ans, source=lhs_val/rhs_val)
+            case('+'); ans=lhs_val+rhs_val
+            case('-'); ans=lhs_val-rhs_val
+            case('*'); ans=lhs_val*rhs_val
+            case('/'); ans=lhs_val/rhs_val
             end select
         end select
     end function
