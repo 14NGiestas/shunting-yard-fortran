@@ -29,7 +29,7 @@ program main
     read(404) buffer
 
     call cpu_time(t0)
-    ret = p % parse(buffer)
+    ret = p % parse(buffer(len("ans = & "):))
     call cpu_time(t1)
     print*, "Time spent ", t1 - t0
     select type(ret)
@@ -38,7 +38,6 @@ program main
     end select
 
     call cpu_time(t0)
-    ans = &
     include 'big-simple-expression.inc'
     call cpu_time(t1)
     print*, "Time spent ", t1 - t0

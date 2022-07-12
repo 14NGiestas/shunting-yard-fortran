@@ -316,21 +316,33 @@ contains
     logical function is_right_assoc(input)
         class(*) :: input
         select type(input); type is (character(*))
-            is_right_assoc = any(REGISTERED_RIGHT_ASSOC == input)
+            if (allocated(REGISTERED_RIGHT_ASSOC)) then
+                is_right_assoc = any(REGISTERED_RIGHT_ASSOC == input)
+            else
+                is_right_assoc = .false.
+            end if
         end select
     end function
 
     logical function is_function(input)
         class(*) :: input
         select type(input); type is (character(*))
-            is_function = any(REGISTERED_FUNCTIONS == input)
+            if (allocated(REGISTERED_FUNCTIONS)) then
+                is_function = any(REGISTERED_FUNCTIONS == input)
+            else
+                is_function = .false.
+            end if
         end select
     end function
 
     logical function is_operator(input)
         class(*) :: input
         select type(input); type is (character(*))
-            is_operator = any(REGISTERED_OPERATORS == input)
+            if (allocated(REGISTERED_OPERATORS)) then
+                is_operator = any(REGISTERED_OPERATORS == input)
+            else
+                is_operator = .false.
+            end if
         end select
     end function
 

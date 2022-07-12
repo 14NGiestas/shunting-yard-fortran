@@ -19,11 +19,9 @@ program main
 
 contains
 
-    function on_operand(self, lhs, opr, rhs) result(ans)
+    function on_operand(self, opr) result(ans)
         class(Parser) :: self
         class(*) :: opr
-        class(*) :: lhs
-        class(*) :: rhs
         class(*), allocatable :: ans
 
         select type(opr)
@@ -41,20 +39,19 @@ contains
         end select
     end function
 
-    function on_function(self, lhs, opr, rhs) result(ans)
+    function on_function(self, fun, arg) result(ans)
         class(Parser) :: self
-        class(*) :: opr
-        class(*) :: lhs
-        class(*) :: rhs
+        class(*) :: fun
+        class(*) :: arg
         class(*), allocatable :: ans
 
-        select type(opr)
+        select type(fun)
         type is (character(*))
-            select type(rhs)
+            select type(arg)
             type is (real)
-                select case(opr)
-                case('sqrt'); ans = sqrt(rhs)
-                case('sin');  ans = sin(rhs)
+                select case(fun)
+                case('sqrt'); ans = sqrt(arg)
+                case('sin');  ans = sin(arg)
                 end select
             end select
         end select
