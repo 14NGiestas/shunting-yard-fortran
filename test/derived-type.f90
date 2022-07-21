@@ -97,7 +97,7 @@ program test_derived_type
         print*, ret
         print*, real(ret % numerator,   kind=REAL64) &
               / real(ret % denominator, kind=REAL64)
-        print*, 5.0d0/3.0d0*4.0d0+3.0d0/2.0d0
+        print*, 2.0d0/3.0d0*4.0d0+3.0d0/2.0d0
     end select
 
 contains
