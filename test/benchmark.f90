@@ -1,20 +1,17 @@
-program main
-    use iso_fortran_env
+program test_benchmark
     use parser_module
-    use parser_listitem
     implicit none
-    integer, parameter :: BUFFER_MAX = 255
     real, parameter :: pi = 4*atan(1.)
 
     real :: t1, t0, ans
-    integer :: stat
-    character(BUFFER_MAX) :: line_buffer
+    integer :: file_size
+    character(:), allocatable :: filename, buffer
 
     type(Parser) :: p
     class(*), allocatable :: ret
 
     call p % register_function(["sin ", "sqrt"])
-    call p % register_operator(["+","-","*","/"])
+    call p % register_operator(["+","-","*","/","="])
     call p % register_operator(["^"], is_right_assoc=.true.)
     call p % ignore_tokens([" ", "&", new_line(' ')])
 
@@ -22,27 +19,31 @@ program main
     p % on_function => on_function
     p % on_operand  => on_operand
 
-    write(*,'(1000(" "))')
-    write(*,'("FORTRAN BC - Example of program using the expression parser")')
-    write(*,'("Some invalid syntax may freeze your terminal (we are not checking)")')
-    write(*,'("Type some basic expr. like: 1/2")')
+    filename = "include/big-simple-expression.inc"
 
-    do
-        write(output_unit,'("fortran-bc> ")',advance='no')
-        read(input_unit,'(a)',iostat=stat) line_buffer
-        if (stat < 0) exit
-        if (len_trim(line_buffer) > 0) then
-            call cpu_time(t0)
-            ret = p % parse(line_buffer)
-            call cpu_time(t1)
+    print '(a)', "test_benchmark"
 
-            print*, "Time spent ", t1 - t0
-            select type(ret)
-            type is (real)
-                print*, ret
-            end select
-        end if
-    end do
+    open(unit=404, file=filename, form='unformatted', access='stream', status='old')
+    inquire(file=filename, size=file_size)
+    allocate(character(file_size) :: buffer)
+    read(404) buffer
+
+    print '("Loaded file ", a, " with size ", g0)', filename, file_size
+
+    call cpu_time(t0)
+    ret = p % parse(buffer(len("ans = & "):))
+    call cpu_time(t1)
+    print '("Time spent to parse file ", g0)', t1 - t0
+    select type(ret)
+    type is (real)
+        print '("Value returned: ", g0)', ret
+    end select
+
+    call cpu_time(t0)
+    include 'big-simple-expression.inc'
+    call cpu_time(t1)
+    print '("Time spent to parse file ", g0)', t1 - t0
+    print '("Value returned: ", g0)', ans
 
 contains
 
@@ -109,6 +110,7 @@ contains
             case('*'); allocate(ans, source=lhs_val*rhs_val)
             case('/'); allocate(ans, source=lhs_val/rhs_val)
             case('^'); allocate(ans, source=lhs_val**rhs_val)
+            case('='); allocate(ans, source=rhs_val)
             end select
         end select
     end function
