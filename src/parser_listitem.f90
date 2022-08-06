@@ -2,11 +2,10 @@ module parser_listitem
     implicit none
     private
 
-    type, public :: None
-    end type
-
-    type, public :: ListItem
-        class(*), allocatable :: content
+    type, public :: token_t
+        character(:), allocatable :: string
+        character(:), allocatable :: type
+        class(*), allocatable :: object
     contains
         procedure :: write
         generic, public :: write(formatted) => write
@@ -15,14 +14,14 @@ module parser_listitem
 contains
 
     subroutine write(self, unit, iotype, v_list, iostat, iomsg)
-        class(ListItem), intent(in) :: self
+        class(token_t), intent(in) :: self
         integer, intent(in) :: unit
         character(*), intent(in) :: iotype
         integer, intent(in)  :: v_list(:)
         integer, intent(out) :: iostat
         character(*), intent(inout) :: iomsg
 
-        select type(it => self % content)
+        select type(it => self % object)
         type is (character(*))
             write(unit,'("''",g0,"''")') it
         type is (real)
@@ -31,10 +30,8 @@ contains
             write(unit,'(g0)') it
         type is (integer)
             write(unit,'(g0)') it
-        class is (None)
-            write(unit,'("None")')
-        !class is (ListItem)
-        !    write(unit,'(g0)') ListItem(it % content)
+        !class is (token_t)
+        !    write(unit,'(g0)') token_t(it % )
         class default
             write(unit,'("[DERIVED TYPE ",I0,"]")') sizeof(it)
         end select

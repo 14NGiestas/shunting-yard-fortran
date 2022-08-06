@@ -15,15 +15,24 @@ cd shunting-yard-fortran
 This project was designed to be built using the [Fortran Package Manager](https://github.com/fortran-lang/fpm).
 Follow the directions on that page to install FPM if you haven't already.
 
-To build, type:
+To build and run, type:
 
 ```sh
-fpm build
+fpm run
+```
+
+to run the tests type
+
+```sh
+fpm test 
+```
+
+to run the example type
+```
+fpm run --example
 ```
 
 ## Usage
-
-In the example program provided in [`example/main.f90`](https://github.com/14NGiestas/shunting-yard-fortran/blob/main/example/main.f90) you will find the basic usage of this package.
 
 The user of this package should tell the parser what is each token, by using the routines `register_*` 
 
@@ -49,30 +58,31 @@ p % on_operand  => on_operand
 ```
 
 Such functions must respect their related interfaces
+
 ```fortran
 abstract interface
     function interface_on_operator(self, lhs, opr, rhs) result(ans)
-        import :: Parser
-        class(Parser)  :: self
-        class(*) :: lhs
-        class(*) :: opr
-        class(*) :: rhs
-        class(*), allocatable :: ans
+        import :: parser_t
+        class(parser_t) :: self
+        type(token_t) :: lhs
+        type(token_t) :: opr
+        type(token_t) :: rhs
+        type(token_t) :: ans
     end function
 
     function interface_on_operand(self, opr) result(ans)
-        import :: Parser
-        class(Parser)  :: self
-        class(*) :: opr
-        class(*), allocatable :: ans
+        import :: parser_t 
+        class(parser_t) :: self
+        type(token_t) :: opr
+        type(token_t) :: ans
     end function
 
     function interface_on_function(self, fun, arg) result(ans)
-        import :: Parser
-        class(Parser)  :: self
-        class(*) :: fun
-        class(*) :: arg
-        class(*), allocatable :: ans
+        import :: parser_t 
+        class(parser_t) :: self
+        type(token_t) :: fun
+        type(token_t) :: arg
+        type(token_t) :: ans
     end function
 end interface
 ```
@@ -81,16 +91,18 @@ For example if you want to make sense of "pi" in a expression you must implement
 
 ```fortran
 function on_operand(self, opr) result(ans)
-    class(Parser) :: self
-    class(*) :: opr
-    class(*), allocatable :: ans
+    class(parser_t) :: self
+    type(token_t) :: opr
+    type(token_t) :: ans
 
-    select type(opr)
-    type is (character(*))
-        select case(opr)
-        case('pi')
-            allocate(ans, source=4*atan(1.))
-        end select
+    ! the `% string` will get the string representation of a token
+    select case(opr % string)
+    case('pi')
+        ! the `% object` is a unlimeted polymorphic `class(*)`
+        ! that you can store and retrieve  arbitrary information
+        ans % object = 4*atan(1.)
     end select
 end function
 ```
+
+See more using the example program provided in [`example/main.f90`](https://github.com/14NGiestas/shunting-yard-fortran/blob/main/example/main.f90) where you will find the basic usage of this package.

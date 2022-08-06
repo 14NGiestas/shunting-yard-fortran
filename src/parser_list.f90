@@ -3,8 +3,10 @@ module parser_list
     implicit none
     private
 
-    type, public :: List
-        type(ListItem), allocatable :: items(:)
+    public :: token_t
+
+    type, public :: token_list
+        type(token_t), allocatable :: items(:)
         integer, private :: num_items = 0
     contains
         procedure :: get
@@ -24,67 +26,60 @@ module parser_list
 contains
 
     subroutine append(self, item)
-        class(List) :: self
-        class(*) :: item
+        class(token_list) :: self
+        type(token_t) :: item
 
         if (.not. allocated(self % items)) then
-            self % items = [ ListItem(item) ]
+            self % items = [ item ]
         else
-            self % items = self % items(:self % num_items)
-            self % items = [ self % items, ListItem(item) ]
+            self % items = [ self % items, item ]
         end if
 
         self % num_items = self % num_items + 1
     end subroutine
 
     function get(self, idx)
-        class(List) :: self
-        class(*), allocatable :: get
+        class(token_list) :: self
+        type(token_t) :: get
         integer, intent(in) :: idx
-        get = self % items(idx) % content
+        get = self % items(idx)
     end function
 
     function pop(self)
-        use iso_fortran_env
-        class(List) :: self
-        class(*), allocatable :: pop
+        class(token_list) :: self
+        type(token_t) :: pop
 
-        if (self % is_empty()) then
-            pop = None()
-            return
-        end if
+        if (self % is_empty()) error stop
 
         pop = self % peek()
         self % num_items = self % num_items - 1
+        self % items = self % items(:self % num_items)
     end function
 
     function peek(self)
-        class(List) :: self
-        class(*), allocatable :: peek
-        if (self % is_empty()) then
-            peek = None()
-            return
-        end if
-        peek = self % items(self % num_items) % content
+        class(token_list) :: self
+        type(token_t), allocatable :: peek
+        if (self % is_empty()) error stop
+        peek = self % items(self % num_items)
     end function
 
     logical function is_empty(self)
-        class(List) :: self
+        class(token_list) :: self
         is_empty = self % num_items == 0
     end function
 
     integer function list_size(self)
-        class(List) :: self
+        type(token_list) :: self
         list_size = self % num_items
     end function
 
     subroutine clear(self)
-        class(List) :: self
+        class(token_list) :: self
         deallocate(self % items)
     end subroutine
 
     subroutine write(self, unit, iotype, v_list, iostat, iomsg)
-        class(List), intent(in) :: self
+        class(token_list), intent(in) :: self
         integer, intent(in) :: unit
         character(*), intent(in) :: iotype
         integer, intent(in)  :: v_list(:)
@@ -95,9 +90,18 @@ contains
         write(unit,'("[")')
         if (size(self) > 0) then
             do i=1,size(self)-1
-                write(unit,'(DT,", ")') self % items(i)
+                if (allocated(self % items(i) % object)) then
+                    write(unit,'(DT,", ")') self % items(i)
+                else
+                    write(unit,'( A,", ")') self % items(i) % string
+                end if
             end do
-            write(unit,'(DT)') self % items(i)
+
+            if (allocated(self % items(i) % object)) then
+                write(unit,'(DT)') self % items(i)
+            else
+                write(unit,'(A)')  self % items(i) % string
+            end if
         end if
         write(unit,'("]")')
     end subroutine

@@ -1,7 +1,6 @@
 program main
     use iso_fortran_env
     use parser_module
-    use parser_listitem
     implicit none
     integer, parameter :: BUFFER_MAX = 255
     real, parameter :: pi = 4*atan(1.)
@@ -10,8 +9,8 @@ program main
     integer :: stat
     character(BUFFER_MAX) :: line_buffer
 
-    type(Parser) :: p
-    class(*), allocatable :: ret
+    type(parser_t) :: p
+    type(token_t) :: ret
 
     call p % register_function(["sin ", "sqrt"])
     call p % register_operator(["+","-","*","/"])
@@ -37,7 +36,7 @@ program main
             call cpu_time(t1)
 
             print*, "Time spent ", t1 - t0
-            select type(ret)
+            select type(ret => ret % object)
             type is (real)
                 print*, ret
             end select
@@ -47,68 +46,56 @@ program main
 contains
 
     function on_operand(self, opr) result(ans)
-        class(Parser) :: self
-        class(*) :: opr
-        class(*), allocatable :: ans
+        class(parser_t) :: self
+        type(token_t) :: opr
+        type(token_t) :: ans
 
-        select type(opr)
-        type is (character(*))
-            select case(opr)
-            case('pi'); allocate(ans, source=4*atan(1.))
-            case default; block
-                integer :: info
-                real :: value
-                read(opr,*,iostat=info) value
-                if (info == 0) allocate(ans, source=value)
-            end block; end select
+        select case(opr % string)
+        case('pi'); ans % object = 4*atan(1.)
+        case default
+        block
+            integer :: info
+            real :: value
+            read(opr % string,*,iostat=info) value
+            if (info == 0) ans % object = value
+        end block
         end select
     end function
 
     function on_function(self, fun, arg) result(ans)
-        class(Parser) :: self
-        class(*) :: fun
-        class(*) :: arg
-        class(*), allocatable :: ans
+        class(parser_t) :: self
+        type(token_t) :: fun
+        type(token_t) :: arg
+        type(token_t) :: ans
 
-        select type(fun)
-        type is (character(*))
-            select type(arg)
-            type is (real)
-                select case(fun)
-                case('sqrt'); allocate(ans, source=sqrt(arg))
-                case('sin');  allocate(ans, source=sin(arg))
-                end select
+        select type(arg => arg % object)
+        type is (real)
+            select case(fun % string)
+            case('sqrt'); ans % object = sqrt(arg)
+            case('sin');  ans % object = sin(arg)
             end select
         end select
 
     end function
 
     function on_operator(self, lhs, opr, rhs) result(ans)
-        class(Parser) :: self
-        class(*) :: opr
-        class(*) :: lhs
-        class(*) :: rhs
-        class(*), allocatable :: ans
-        real :: lhs_val, rhs_val
+        class(parser_t) :: self
+        type(token_t) :: opr
+        type(token_t) :: lhs
+        type(token_t) :: rhs
+        type(token_t) :: ans
 
-        select type(lhs)
+        select type(lhs => lhs % object)
         type is (real)
-            lhs_val = lhs
-        end select
-
-        select type(rhs)
-        type is (real)
-            rhs_val = rhs
-        end select
-
-        select type(opr)
-        type is (character(*))
-            select case(opr)
-            case('+'); allocate(ans, source=lhs_val+rhs_val)
-            case('-'); allocate(ans, source=lhs_val-rhs_val)
-            case('*'); allocate(ans, source=lhs_val*rhs_val)
-            case('/'); allocate(ans, source=lhs_val/rhs_val)
-            case('^'); allocate(ans, source=lhs_val**rhs_val)
+            select type(rhs => rhs % object)
+            type is (real)
+                select case(opr % string)
+                case('+'); ans % object = lhs+rhs
+                case('-'); ans % object = lhs-rhs
+                case('*'); ans % object = lhs*rhs
+                case('/'); ans % object = lhs/rhs
+                case('^'); ans % object = lhs**rhs
+                end select
             end select
         end select
     end function

@@ -5,7 +5,9 @@ module parser_module
     implicit none
     private
 
-    type, public :: Parser
+    public :: token_t
+
+    type, public :: parser_t
         procedure(interface_on_function), pointer :: on_function => null()
         procedure(interface_on_operator), pointer :: on_operator => null()
         procedure(interface_on_operand),  pointer :: on_operand  => null()
@@ -22,27 +24,27 @@ module parser_module
 
     abstract interface
         function interface_on_operator(self, lhs, opr, rhs) result(ans)
-            import :: Parser
-            class(Parser)  :: self
-            class(*) :: lhs
-            class(*) :: opr
-            class(*) :: rhs
-            class(*), allocatable :: ans
+            import :: parser_t, token_t
+            class(parser_t) :: self
+            type(token_t) :: lhs
+            type(token_t) :: opr
+            type(token_t) :: rhs
+            type(token_t) :: ans
         end function
 
         function interface_on_operand(self, opr) result(ans)
-            import :: Parser
-            class(Parser)  :: self
-            class(*) :: opr
-            class(*), allocatable :: ans
+            import :: parser_t, token_t
+            class(parser_t) :: self
+            type(token_t) :: opr
+            type(token_t) :: ans
         end function
 
         function interface_on_function(self, fun, arg) result(ans)
-            import :: Parser
-            class(Parser)  :: self
-            class(*) :: fun
-            class(*) :: arg
-            class(*), allocatable :: ans
+            import :: parser_t, token_t
+            class(parser_t)  :: self
+            type(token_t) :: fun
+            type(token_t) :: arg
+            type(token_t) :: ans
         end function
     end interface
 
@@ -91,12 +93,12 @@ contains
     end subroutine
 
     function parse(self, infix) result(ans)
-        class(Parser) :: self
+        class(parser_t) :: self
         character(*) :: infix
-        type(List) :: tokens
-        type(List) :: postfix
-        type(List) :: output
-        class(*), allocatable :: ans
+        type(token_list) :: tokens
+        type(token_list) :: postfix
+        type(token_list) :: output
+        type(token_t)    :: ans
 
         call self % tokenize_input(infix, tokens)
         if (is_enclosed(tokens)) then
@@ -110,9 +112,10 @@ contains
     end function
 
     subroutine tokenize_input(self, from, tokens)
-        class(Parser) :: self
+        class(parser_t) :: self
         character(*), intent(in)  :: from
-        type(List),   intent(in out) :: tokens
+        type(token_list), intent(in out) :: tokens
+        type(token_t) :: new_token
         character(:), allocatable :: infix
         character(:), allocatable :: slice, next_char
         logical :: is_token, is_next_token
@@ -137,7 +140,8 @@ contains
             is_next_token = any(REGISTERED_OPERATORS == next_char) &
                   .or. scan(next_char,'()') > 0
             if (is_token .or. is_next_token) then
-                call tokens % append(slice)
+                new_token % string = slice
+                call tokens % append(new_token)
                 i = i + 1
                 if (is_next_token) i = i + delta
                 delta = 0
@@ -146,7 +150,8 @@ contains
             end if
         end do
         slice = infix(i:)
-        call tokens % append(slice)
+        new_token % string = slice
+        call tokens % append(new_token)
 
     contains
 
@@ -168,33 +173,36 @@ contains
     end subroutine
 
     subroutine convert_to_RPN(self, tokens, postfix)
-        class(Parser) :: self
-        type(List), intent(in)  :: tokens
-        type(List), intent(out) :: postfix
-        type(List) :: operators
-        class(*), allocatable :: token, top
+        class(parser_t) :: self
+        type(token_list), intent(in)  :: tokens
+        type(token_list), intent(out) :: postfix
+        type(token_list) :: operators
+        type(token_t) :: token, top
         integer :: i
 
         do i=1,size(tokens)
             token = tokens % get(i)
             ! Is a registered function?
-            if (is_function(token)) then
+            if (is_function(token % string)) then
                 ! Push into operator stack
+                token % type = "function"
                 call operators % append(token)
             ! Is a valid operand: number or variable name?
-            else if (is_operand(token)) then
+            else if (is_operand(token % string)) then
                 ! Push into output queue
+                token % type = "operand"
                 call postfix % append(token)
             ! Is a open paren.
-            else if (is_open_paren(token)) then
+            else if (is_open_paren(token % string)) then
                 ! Push parenthesis
+                token % type = "open_paren"
                 call operators % append(token)
             ! Is a close paren.
-            else if (is_close_paren(token)) then
+            else if (is_close_paren(token % string)) then
                 ! Pop parenthesis
                 do
                     top = operators % peek()
-                    if (.not. is_open_paren(top)) then
+                    if (.not. is_open_paren(top % string)) then
                         call postfix % append(top)
                         top = operators % pop()
                     else
@@ -206,11 +214,11 @@ contains
             else ! Is a registered operator
                 do while (size(operators) > 0)
                     top = operators % peek()
-                    if (.not. is_open_paren(top) &
+                    if (.not. is_open_paren(top%string) &
                         .and. ( &
-                            (is_left_assoc(token) .and. priority(token) <= priority(top)) &
+                            (is_left_assoc(token%string) .and. priority(token%string) <= priority(top%string)) &
                             .or. &
-                            (is_right_assoc(token) .and. priority(token) < priority(top)) &
+                            (is_right_assoc(token%string) .and. priority(token%string) < priority(top%string)) &
                         ) &
                     ) then
                         ! Pop operator to output"
@@ -232,27 +240,27 @@ contains
     end subroutine
 
     subroutine eval_expression(self, postfix, output)
-        class(Parser) :: self
-        type(List), intent(in out) :: postfix
-        type(List), intent(out) :: output
-        class(*), allocatable :: token
-        class(*), allocatable :: op1, op2, ret
+        class(parser_t) :: self
+        type(token_list), intent(in out) :: postfix
+        type(token_list), intent(out) :: output
+        type(token_t) :: token, new_token
+        type(token_t) :: op1, op2, ret
         integer :: i
 
         do i=1,size(postfix)
             token = postfix % get(i)
-            if (is_function(token)) then
+            if (is_function(token % string)) then
                 ! Pop the first operand
                 op1 = output % pop()
                 ! Evaluate the return
                 ret = self % on_function(token, op1)
                 ! Put result back in the stack
                 call output % append(ret)
-            else if (is_operand(token)) then
+            else if (is_operand(token % string)) then
                 ret = self % on_operand(token)
                 ! Convert operand string into a actual operand
                 call output % append(ret)
-            else if (is_operator(token)) then
+            else if (is_operator(token % string)) then
                 ! Pop the first operand
                 op1 = output % pop()
                 ! Pop the second operand
@@ -266,97 +274,83 @@ contains
     end subroutine
 
     integer function priority(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            if (is_function(input) &
-                .or. is_open_paren(input) &
-                .or. is_close_paren(input) &
-            ) then
-                priority = 5
-            else if (input == '^') then
-                priority = 4
-            else if (input == '*' .or. input == '/') then
-                priority = 3
-            else if (input == '+' .or. input == '-') then
-                priority = 2
-            else
-                priority = -1
-            end if
-        end select
+        character(*), intent(in) :: input
+        if (is_function(input) &
+            .or. is_open_paren(input) &
+            .or. is_close_paren(input) &
+        ) then
+            priority = 5
+        else if (input == '^') then
+            priority = 4
+        else if (input == '*' .or. input == '/') then
+            priority = 3
+        else if (input == '+' .or. input == '-') then
+            priority = 2
+        else
+            priority = -1
+        end if
     end function
 
     logical function is_open_paren(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            is_open_paren = scan(input, '(') > 0
-        end select
+        character(*), intent(in) :: input
+        is_open_paren = scan(input, '(') > 0
     end function
 
     logical function is_close_paren(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            is_close_paren = scan(input, ')') > 0
-        end select
+        character(*), intent(in) :: input
+        is_close_paren = scan(input, ')') > 0
     end function
 
     logical function is_operand(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            is_operand = scan(input, "abcdefghijklmnopqrstuvwxyz_"//&
-                                     "ABCDEFGUIJKLMNOPQRSTUVWXYZ."//&
-                                     "0123456789") > 0
-        end select
+        character(*), intent(in) :: input
+        is_operand = scan(input, "abcdefghijklmnopqrstuvwxyz_"//&
+                                 "ABCDEFGUIJKLMNOPQRSTUVWXYZ."//&
+                                 "0123456789") > 0
     end function
 
     logical function is_left_assoc(input)
-        class(*) :: input
+        character(*), intent(in) :: input
         is_left_assoc = .not. is_right_assoc(input)
     end function
 
     logical function is_right_assoc(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            if (allocated(REGISTERED_RIGHT_ASSOC)) then
-                is_right_assoc = any(REGISTERED_RIGHT_ASSOC == input)
-            else
-                is_right_assoc = .false.
-            end if
-        end select
+        character(*), intent(in) :: input
+        if (allocated(REGISTERED_RIGHT_ASSOC)) then
+            is_right_assoc = any(REGISTERED_RIGHT_ASSOC == input)
+        else
+            is_right_assoc = .false.
+        end if
     end function
 
     logical function is_function(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            if (allocated(REGISTERED_FUNCTIONS)) then
-                is_function = any(REGISTERED_FUNCTIONS == input)
-            else
-                is_function = .false.
-            end if
-        end select
+        character(*), intent(in) :: input
+        if (allocated(REGISTERED_FUNCTIONS)) then
+            is_function = any(REGISTERED_FUNCTIONS == input)
+        else
+            is_function = .false.
+        end if
     end function
 
     logical function is_operator(input)
-        class(*) :: input
-        select type(input); type is (character(*))
-            if (allocated(REGISTERED_OPERATORS)) then
-                is_operator = any(REGISTERED_OPERATORS == input)
-            else
-                is_operator = .false.
-            end if
-        end select
+        character(*), intent(in) :: input
+        if (allocated(REGISTERED_OPERATORS)) then
+            is_operator = any(REGISTERED_OPERATORS == input)
+        else
+            is_operator = .false.
+        end if
     end function
 
     logical function is_enclosed(tokens)
-        type(List) :: tokens
-        class(*), allocatable :: token
+        type(token_list) :: tokens
+        type(token_t)    :: token
         integer :: i,k
         is_enclosed = .false.
         k = 0
         do i = 1, size(tokens)
             token = tokens % get(i)
-            if (is_open_paren(token)) then
+            if (is_open_paren(token % string)) then
                 k = k + 1
-            else if (is_close_paren(token)) then
+            else if (is_close_paren(token % string)) then
                 k = k - 1
             end if
             if (k < 0) exit
