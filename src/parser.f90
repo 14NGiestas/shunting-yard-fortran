@@ -1,7 +1,6 @@
 module parser_module
     use iso_fortran_env
-    use parser_list
-    use parser_listitem
+    use fortran_tokenizer
     implicit none
     private
 
@@ -17,7 +16,6 @@ module parser_module
         procedure, nopass :: register_operator
         procedure, nopass :: ignore_tokens
         procedure, nopass :: is_enclosed
-        procedure, private :: tokenize_input
         procedure, private :: convert_to_RPN
         procedure, private :: eval_expression
     end type
@@ -99,8 +97,11 @@ contains
         type(token_list) :: postfix
         type(token_list) :: output
         type(token_t)    :: ans
+        type(tokenizer_t) :: tokenizer
 
-        call self % tokenize_input(infix, tokens)
+        tokenizer % validate_token => by_expression
+        tokens = tokenizer % tokenize(infix)
+
         if (is_enclosed(tokens)) then
             call self % convert_to_RPN(tokens, postfix)
             call self % eval_expression(postfix, output)
@@ -109,68 +110,19 @@ contains
             stop
         end if
         ans = output % pop()
-    end function
-
-    subroutine tokenize_input(self, from, tokens)
-        class(parser_t) :: self
-        character(*), intent(in)  :: from
-        type(token_list), intent(in out) :: tokens
-        type(token_t) :: new_token
-        character(:), allocatable :: infix
-        character(:), allocatable :: slice, next_char
-        logical :: is_token, is_next_token
-        integer :: i, delta
-
-        ! Sanitization
-        infix = replace(from,'**','^')
-        ! Ignore whitespace by default
-        if (.not. allocated(REGISTERED_IGNORED)) REGISTERED_IGNORED = [" ", new_line(' ')]
-        ! Ignored tokens
-        do i=1,size(REGISTERED_IGNORED)
-            infix = replace(infix, REGISTERED_IGNORED(i), '')
-        end do
-
-        delta = 0
-        i = 1
-        do while(i+delta < len(infix))
-            slice     = infix(i:i+delta)
-            next_char = infix(i+delta+1:i+delta+1)
-            is_token = any(REGISTERED_OPERATORS == slice) &
-                  .or. scan(slice,'()') > 0
-            is_next_token = any(REGISTERED_OPERATORS == next_char) &
-                  .or. scan(next_char,'()') > 0
-            if (is_token .or. is_next_token) then
-                new_token % string = slice
-                call tokens % append(new_token)
-                i = i + 1
-                if (is_next_token) i = i + delta
-                delta = 0
-            else
-                delta = delta + 1
-            end if
-        end do
-        slice = infix(i:)
-        new_token % string = slice
-        call tokens % append(new_token)
-
     contains
-
-        function replace(string, text, repl) result(output)
-            character(*) :: string, text, repl
-            character(:), allocatable :: output
-            integer :: i, nt, nr
-
-            output = string
-            nt = len(text)
-            nr = len(repl)
-            do
-                i = index(output,text(:nt))
-                if (i == 0) exit
-                output = output(:i-1) // repl(:nr) // output(i+nt:)
-            end do
+        logical function by_expression(token)
+            character(*), intent(in) :: token
+            integer :: i
+            by_expression = .true. &
+            .and. .not. any(token == REGISTERED_IGNORED) &
+            .and. ( &
+                     any(token == REGISTERED_FUNCTIONS) &
+                .or. any(token == REGISTERED_OPERATORS) &
+                .or. all([( is_operand(token(i:i)), i = 1, len(token) )]) &
+            )
         end function
-
-    end subroutine
+    end function
 
     subroutine convert_to_RPN(self, tokens, postfix)
         class(parser_t) :: self
