@@ -7,7 +7,7 @@ program test_benchmark
     integer :: file_size
     character(:), allocatable :: filename, buffer
 
-    type(Parser) :: p
+    type(parser_t) :: p
     type(token_t) :: ret
 
     call p % register_function(["sin ", "sqrt"])
@@ -31,7 +31,7 @@ program test_benchmark
     print '("Loaded file ", a, " with size ", g0)', filename, file_size
 
     call cpu_time(t0)
-    ret = p % parse(buffer(len("ans = & "):))
+    ret = p % parse(trim(buffer))
     call cpu_time(t1)
     print '("Time spent to parse file ", g0)', t1 - t0
     select type(ret => ret % object)
@@ -48,7 +48,7 @@ program test_benchmark
 contains
 
     function on_operand(self, opr) result(ans)
-        class(Parser) :: self
+        class(parser_t) :: self
         type(token_t) :: opr
         type(token_t) :: ans
 
@@ -65,7 +65,7 @@ contains
     end function
 
     function on_function(self, fun, arg) result(ans)
-        class(Parser) :: self
+        class(parser_t) :: self
         type(token_t) :: fun
         type(token_t) :: arg
         type(token_t) :: ans
@@ -81,7 +81,7 @@ contains
     end function
 
     function on_operator(self, lhs, opr, rhs) result(ans)
-        class(Parser) :: self
+        class(parser_t) :: self
         type(token_t) :: opr
         type(token_t) :: lhs
         type(token_t) :: rhs

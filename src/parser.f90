@@ -101,6 +101,7 @@ contains
 
         tokenizer % validate_token => by_expression
         tokens = tokenizer % tokenize(infix)
+        print*, tokens
 
         if (is_enclosed(tokens)) then
             call self % convert_to_RPN(tokens, postfix)
@@ -117,9 +118,11 @@ contains
             by_expression = .true. &
             .and. .not. any(token == REGISTERED_IGNORED) &
             .and. ( &
-                     any(token == REGISTERED_FUNCTIONS) &
-                .or. any(token == REGISTERED_OPERATORS) &
-                .or. all([( is_operand(token(i:i)), i = 1, len(token) )]) &
+                     is_function(token) &
+                .or. is_operator(token) &
+                .or. is_operand(token) &
+                .or. is_open_paren(token) &
+                .or. is_close_paren(token) &
             )
         end function
     end function
@@ -255,9 +258,15 @@ contains
 
     logical function is_operand(input)
         character(*), intent(in) :: input
-        is_operand = scan(input, "abcdefghijklmnopqrstuvwxyz_"//&
-                                 "ABCDEFGUIJKLMNOPQRSTUVWXYZ."//&
-                                 "0123456789") > 0
+        integer :: i
+        is_operand = all([( is_alphanum(input(i:i)), i = 1, len(input) )])
+    end function
+
+    logical function is_alphanum(input)
+        character(*), intent(in) :: input
+        is_alphanum = scan(input, "abcdefghijklmnopqrstuvwxyz_"//&
+                                  "ABCDEFGUIJKLMNOPQRSTUVWXYZ."//&
+                                  "0123456789") > 0
     end function
 
     logical function is_left_assoc(input)
