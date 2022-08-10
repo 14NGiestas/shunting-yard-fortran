@@ -101,7 +101,6 @@ contains
 
         tokenizer % validate_token => by_expression
         tokens = tokenizer % tokenize(infix)
-        print*, tokens
 
         if (is_enclosed(tokens)) then
             call self % convert_to_RPN(tokens, postfix)
@@ -114,7 +113,6 @@ contains
     contains
         logical function by_expression(token)
             character(*), intent(in) :: token
-            integer :: i
             by_expression = .true. &
             .and. .not. any(token == REGISTERED_IGNORED) &
             .and. ( &
