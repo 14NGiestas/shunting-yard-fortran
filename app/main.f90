@@ -13,8 +13,8 @@ program main
     type(token_t) :: ret
 
     call p % register_function(["sin ", "sqrt"])
-    call p % register_operator(["+","-","*","/"])
-    call p % register_operator(["^"], is_right_assoc=.true.)
+    call p % register_operator(["+ ","- ","* ","/ "])
+    call p % register_operator(["**"], is_right_assoc=.true.)
     call p % ignore_tokens([" ", "&", new_line(' ')])
 
     p % on_operator => on_operator
@@ -36,10 +36,7 @@ program main
             call cpu_time(t1)
 
             print*, "Time spent ", t1 - t0
-            select type(ret => ret % object)
-            type is (real)
-                print*, ret
-            end select
+            print*, ret
         end if
     end do
 
@@ -94,7 +91,7 @@ contains
                 case('-'); ans % object = lhs-rhs
                 case('*'); ans % object = lhs*rhs
                 case('/'); ans % object = lhs/rhs
-                case('^'); ans % object = lhs**rhs
+                case('**'); ans % object = lhs**rhs
                 end select
             end select
         end select

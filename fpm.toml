@@ -7,3 +7,6 @@ copyright = "2020 Ian Giestas Pauli"
 
 [ library ]
 include-dir = "include"
+
+[ dependencies ]
+fortran-tokenizer = { git = "https://github.com/14NGiestas/fortran-tokenizer.git" }
