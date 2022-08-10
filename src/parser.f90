@@ -246,12 +246,12 @@ contains
 
     logical function is_open_paren(input)
         character(*), intent(in) :: input
-        is_open_paren = scan(input, '(') > 0
+        is_open_paren = input == '('
     end function
 
     logical function is_close_paren(input)
         character(*), intent(in) :: input
-        is_close_paren = scan(input, ')') > 0
+        is_close_paren = input == ')'
     end function
 
     logical function is_operand(input)

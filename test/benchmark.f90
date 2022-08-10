@@ -11,8 +11,8 @@ program test_benchmark
     type(token_t) :: ret
 
     call p % register_function(["sin ", "sqrt"])
-    call p % register_operator(["+","-","*","/","="])
-    call p % register_operator(["^"], is_right_assoc=.true.)
+    call p % register_operator(["+ ","- ","* ","/ ","= "])
+    call p % register_operator(["**"], is_right_assoc=.true.)
     call p % ignore_tokens([" ", "&", new_line(' ')])
 
     p % on_operator => on_operator

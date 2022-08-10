@@ -36,10 +36,7 @@ program main
             call cpu_time(t1)
 
             print*, "Time spent ", t1 - t0
-            select type(ret => ret % object)
-            type is (real)
-                print*, ret
-            end select
+            print*, ret
         end if
     end do
 
