@@ -10,11 +10,12 @@ After a while (2022) I finally got it to work with Derived Types by reworking th
 Although it works as a way to write parsers I do not recommend you using it as a dependency as there are a lot of design issues:
 
 1. No Thread safety: I register valid tokens as a global singleton, so multiple parsers are not supported. 
-2. Hard-coded precedence: the operator precedence is currently fixed for a few tokens.
+2. Hard-coded precedence: the operator precedence is currently fixed for a few tokens (desynced with registered ones).
 3. No unary support (no ambiguity): unary `-`/`+` operations must be done defining a function.
-4. As it uses an array of strings all tokens must be padded with spaces so they are same-size. 
+4. As it uses an array of strings all tokens must be padded with spaces so they are same-size.
+5. The current app provides no way to check syntax errors 
 
-That being said, I am using it anyway right now and the current public API feels somewhat good and I will be working on a proper package with a generic version based on this idea soon:tm:
+That being said, I am using it anyway right now and the current public API feels ok, so I will be working on a proper package with a generic version based on this idea soon:tm:.
 
 ## Getting Started
 
