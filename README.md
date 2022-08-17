@@ -1,6 +1,21 @@
 # shunting-yard-fortran
 Small Expression Parser Using Shunting Yard Algorithm.
 
+# About
+
+This is just a toy project I started as a way to parse Derived Types (my hamiltonian model) from a file/string (and eventually I gave up as it didn't worked well - but I've published anyway), so the point here is not be super performant but flexible enough to allow you write your own parser with some ease, reusing operator overloaded structures that you may have already.
+
+After a while (2022) I finally got it to work with Derived Types by reworking the API to use a `token_t` and `token_list` that I made a separate package for, [fortran-tokenizer](https://github.com/14NGiestas/fortran-tokenizer).
+
+Although it works as a way to write parsers I do not recommend you using it as a dependency as there are a lot of design issues:
+
+1. No Thread safety: I register valid tokens as a global singleton, so multiple parsers are not supported. 
+2. Hard-coded precedence: the operator precedence is currently fixed for a few tokens.
+3. No unary support (no ambiguity): unary `-`/`+` operations must be done defining a function.
+4. As it uses an array of strings all tokens must be padded with spaces so they are same-size. 
+
+That being said, I am using it anyway right now and the current public API feels somewhat good and I will be working on a proper package with a generic version based on this idea soon:tm:
+
 ## Getting Started
 
 First get the code, by cloning the repo:
