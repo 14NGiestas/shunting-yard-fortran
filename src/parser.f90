@@ -114,7 +114,7 @@ contains
         logical function by_expression(token)
             character(*), intent(in) :: token
             by_expression = .true. &
-            .and. .not. any(token == REGISTERED_IGNORED) &
+            .and. .not. is_ignored(token) &
             .and. ( &
                      is_function(token) &
                 .or. is_operator(token) &
@@ -154,16 +154,14 @@ contains
             else if (is_close_paren(token % string)) then
                 ! Pop parenthesis
                 do
-                    top = operators % peek()
+                    top = operators % pop()
                     if (.not. is_open_paren(top % string)) then
                         call postfix % append(top)
-                        top = operators % pop()
                     else
                         exit
                     end if
                 end do
 
-                top = operators % pop()
             else ! Is a registered operator
                 do while (size(operators) > 0)
                     top = operators % peek()
@@ -278,6 +276,15 @@ contains
             is_right_assoc = any(REGISTERED_RIGHT_ASSOC == input)
         else
             is_right_assoc = .false.
+        end if
+    end function
+
+    logical function is_ignored(input)
+        character(*), intent(in) :: input
+        if (allocated(REGISTERED_IGNORED)) then
+            is_ignored = any(REGISTERED_IGNORED == input)
+        else
+            is_ignored = .false.
         end if
     end function
 
