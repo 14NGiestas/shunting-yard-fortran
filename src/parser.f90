@@ -7,13 +7,16 @@ module parser_module
     public :: token_t
 
     type, public :: parser_t
-        procedure(interface_on_function), pointer :: on_function => null()
-        procedure(interface_on_operator), pointer :: on_operator => null()
-        procedure(interface_on_operand),  pointer :: on_operand  => null()
+        type(tokenizer_t) :: tokenizer
+        procedure(interface_on_unary),   pointer :: on_unary   => null()
+        procedure(interface_on_binary),  pointer :: on_binary  => null()
+        procedure(interface_on_operand), pointer :: on_operand => null()
     contains
         procedure :: parse
-        procedure, nopass :: register_function
-        procedure, nopass :: register_operator
+        procedure, nopass :: register_unary
+        procedure, nopass :: register_function => register_unary
+        procedure, nopass :: register_binary
+        procedure, nopass :: register_operator => register_binary
         procedure, nopass :: ignore_tokens
         procedure, nopass :: is_enclosed
         procedure, private :: convert_to_RPN
@@ -21,7 +24,7 @@ module parser_module
     end type
 
     abstract interface
-        function interface_on_operator(self, lhs, opr, rhs) result(ans)
+        function interface_on_binary(self, lhs, opr, rhs) result(ans)
             import :: parser_t, token_t
             class(parser_t) :: self
             type(token_t) :: lhs
@@ -37,48 +40,57 @@ module parser_module
             type(token_t) :: ans
         end function
 
-        function interface_on_function(self, fun, arg) result(ans)
+        function interface_on_unary(self, opr, arg) result(ans)
             import :: parser_t, token_t
             class(parser_t)  :: self
-            type(token_t) :: fun
+            type(token_t) :: opr
             type(token_t) :: arg
             type(token_t) :: ans
         end function
     end interface
 
     character(:), allocatable :: REGISTERED_IGNORED(:)
-    character(:), allocatable :: REGISTERED_FUNCTIONS(:)
-    character(:), allocatable :: REGISTERED_OPERATORS(:)
+    character(:), allocatable :: REGISTERED_UNARY(:)
+    character(:), allocatable :: REGISTERED_BINARY(:)
     character(:), allocatable :: REGISTERED_RIGHT_ASSOC(:)
 
 contains
 
-    subroutine register_function(fun_names)
-        character(*) :: fun_names(:)
-        if (allocated(REGISTERED_FUNCTIONS)) then
-            REGISTERED_FUNCTIONS = [REGISTERED_FUNCTIONS, fun_names]
+    subroutine register_unary(names)
+        character(*) :: names(:)
+
+        if (allocated(REGISTERED_UNARY)) then
+            REGISTERED_UNARY = [REGISTERED_UNARY, names]
         else
-            REGISTERED_FUNCTIONS = [fun_names]
+            REGISTERED_UNARY = [names]
+        end if
+
+        if (allocated(REGISTERED_RIGHT_ASSOC)) then
+            REGISTERED_RIGHT_ASSOC = [REGISTERED_RIGHT_ASSOC, names]
+        else
+            REGISTERED_RIGHT_ASSOC = [names]
         end if
     end subroutine
 
-    subroutine register_operator(opr_names, is_right_assoc)
-        character(*) :: opr_names(:)
+    subroutine register_binary(names, is_right_assoc)
+        character(*) :: names(:)
         logical, optional :: is_right_assoc
-        if (allocated(REGISTERED_OPERATORS)) then
-            REGISTERED_OPERATORS = [REGISTERED_OPERATORS, opr_names]
+
+        if (allocated(REGISTERED_BINARY)) then
+            REGISTERED_BINARY = [REGISTERED_BINARY, names]
         else
-            REGISTERED_OPERATORS = [opr_names]
+            REGISTERED_BINARY = [names]
         end if
 
         if (present(is_right_assoc)) then
             if (.not. is_right_assoc) return
             if (allocated(REGISTERED_RIGHT_ASSOC)) then
-                REGISTERED_RIGHT_ASSOC = [REGISTERED_RIGHT_ASSOC, opr_names]
+                REGISTERED_RIGHT_ASSOC = [REGISTERED_RIGHT_ASSOC, names]
             else
-                REGISTERED_RIGHT_ASSOC = [opr_names]
+                REGISTERED_RIGHT_ASSOC = [names]
             end if
         end if
+
     end subroutine
 
     subroutine ignore_tokens(ignored_names)
@@ -97,10 +109,9 @@ contains
         type(token_list) :: postfix
         type(token_list) :: output
         type(token_t)    :: ans
-        type(tokenizer_t) :: tokenizer
 
-        tokenizer % validate_token => by_expression
-        tokens = tokenizer % tokenize(infix)
+        self % tokenizer % validate_token => by_expression
+        tokens = self % tokenizer % tokenize(infix)
 
         if (is_enclosed(tokens)) then
             call self % convert_to_RPN(tokens, postfix)
@@ -116,8 +127,8 @@ contains
             by_expression = .true. &
             .and. .not. is_ignored(token) &
             .and. ( &
-                     is_function(token) &
-                .or. is_operator(token) &
+                     is_unary(token) &
+                .or. is_binary(token) &
                 .or. is_operand(token) &
                 .or. is_open_paren(token) &
                 .or. is_close_paren(token) &
@@ -130,21 +141,25 @@ contains
         type(token_list), intent(in)  :: tokens
         type(token_list), intent(out) :: postfix
         type(token_list) :: operators
-        type(token_t) :: token, top
+        type(token_t) :: token, prev_token, top
         integer :: i
+
+        prev_token % type = 'null'
+        
 
         do i=1,size(tokens)
             token = tokens % get(i)
             ! Is a registered function?
-            if (is_function(token % string)) then
+            if (is_unary(token % string) .and. ( &
+                prev_token % type == 'null'       .or. &
+                prev_token % type == 'open_paren' .or. &
+                prev_token % type == 'unary'      .or. &
+                prev_token % type == 'binary'          &
+               ) &
+            ) then
                 ! Push into operator stack
-                token % type = "function"
+                token % type = "unary"
                 call operators % append(token)
-            ! Is a valid operand: number or variable name?
-            else if (is_operand(token % string)) then
-                ! Push into output queue
-                token % type = "operand"
-                call postfix % append(token)
             ! Is a open paren.
             else if (is_open_paren(token % string)) then
                 ! Push parenthesis
@@ -152,24 +167,23 @@ contains
                 call operators % append(token)
             ! Is a close paren.
             else if (is_close_paren(token % string)) then
+                token % type = "close_paren"
                 ! Pop parenthesis
                 do
                     top = operators % pop()
-                    if (.not. is_open_paren(top % string)) then
-                        call postfix % append(top)
-                    else
-                        exit
-                    end if
+                    if (top % type == 'open_paren') exit
+                    call postfix % append(top)
                 end do
-
-            else ! Is a registered operator
+            else if (is_binary(token % string)) then
+                token % type = "binary"
+                ! Is a registered operator
                 do while (size(operators) > 0)
                     top = operators % peek()
                     if (.not. is_open_paren(top%string) &
                         .and. ( &
-                            (is_left_assoc(token%string) .and. priority(token%string) <= priority(top%string)) &
+                            (is_left_assoc(token%string) .and. priority(token) <= priority(top)) &
                             .or. &
-                            (is_right_assoc(token%string) .and. priority(token%string) < priority(top%string)) &
+                            (is_right_assoc(token%string) .and. priority(token) < priority(top)) &
                         ) &
                     ) then
                         ! Pop operator to output"
@@ -180,7 +194,14 @@ contains
                     end if
                 end do
                 call operators % append(token)
+            ! Is a valid operand: number or variable name?
+            else if (is_operand(token % string)) then
+                ! Push into output queue
+                token % type = "operand"
+                call postfix % append(token)
             end if
+
+            prev_token = token
         end do
 
         ! Pop all remaining operators
@@ -200,42 +221,42 @@ contains
 
         do i=1,size(postfix)
             token = postfix % get(i)
-            if (is_function(token % string)) then
+            select case(token % type)
+            case ("unary")
                 ! Pop the first operand
                 op1 = output % pop()
                 ! Evaluate the return
-                ret = self % on_function(token, op1)
+                ret = self % on_unary(token, op1)
                 ! Put result back in the stack
                 call output % append(ret)
-            else if (is_operand(token % string)) then
-                ret = self % on_operand(token)
-                ! Convert operand string into a actual operand
-                call output % append(ret)
-            else if (is_operator(token % string)) then
+            case ("binary")
                 ! Pop the first operand
                 op1 = output % pop()
                 ! Pop the second operand
                 op2 = output % pop()
                 !
-                ret = self % on_operator(op2,token,op1)
+                ret = self % on_binary(op2,token,op1)
                 ! Perform operation
                 call output % append(ret)
-            end if
+            case ("operand")
+                ret = self % on_operand(token)
+                ! Convert operand string into a actual operand
+                call output % append(ret)
+            end select
         end do
     end subroutine
 
-    integer function priority(input)
-        character(*), intent(in) :: input
-        if (is_function(input) &
-            .or. is_open_paren(input) &
-            .or. is_close_paren(input) &
-        ) then
+    integer function priority(token)
+        type(token_t), intent(in) :: token 
+        if (token % type == 'unary'      .or. &
+            token % type == 'open_paren' .or. &
+            token % type == 'close_paren') then
             priority = 5
-        else if (input == '^' .or. input == '**') then
+        else if (token % string == '^' .or. token % string == '**') then
             priority = 4
-        else if (input == '*' .or. input == '/') then
+        else if (token % string == '*' .or. token % string == '/') then
             priority = 3
-        else if (input == '+' .or. input == '-') then
+        else if (token % string == '+' .or. token % string == '-') then
             priority = 2
         else
             priority = -1
@@ -288,21 +309,21 @@ contains
         end if
     end function
 
-    logical function is_function(input)
+    logical function is_unary(input)
         character(*), intent(in) :: input
-        if (allocated(REGISTERED_FUNCTIONS)) then
-            is_function = any(REGISTERED_FUNCTIONS == input)
+        if (allocated(REGISTERED_UNARY)) then
+            is_unary = any(REGISTERED_UNARY == input)
         else
-            is_function = .false.
+            is_unary = .false.
         end if
     end function
 
-    logical function is_operator(input)
+    logical function is_binary(input)
         character(*), intent(in) :: input
-        if (allocated(REGISTERED_OPERATORS)) then
-            is_operator = any(REGISTERED_OPERATORS == input)
+        if (allocated(REGISTERED_BINARY)) then
+            is_binary = any(REGISTERED_BINARY == input)
         else
-            is_operator = .false.
+            is_binary = .false.
         end if
     end function
 

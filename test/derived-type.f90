@@ -85,13 +85,19 @@ program test_derived_type
 
     type(parser_t) :: p
 
-    call p % register_operator(["+","-","*","/"])
+    call p % register_unary(["+","-"])
+    call p % register_binary(["+","-","*","/"])
 
-    p % on_operator => on_operator
-    p % on_function => on_function
+    p % on_unary    => on_unary
+    p % on_binary   => on_binary
     p % on_operand  => on_operand
 
-    call test("5/3*4+3/2",         5.0_wp/3.0_wp*4.0_wp+3.0_wp/2.0_wp)
+    call test("-(-2)*(-2)",        - (-2.0_wp) * (-2.0_wp) )
+    call test("--(-2)*(-2)",       - - (-2.0_wp) * (-2.0_wp) )
+    call test("--(-2)/(-3)",       - - (-2.0_wp) / (-3.0_wp) )
+    call test("--(-2/-3)",         - - (-2.0_wp / -3.0_wp) )
+    call test("-+(-2/-3)",         - + (-2.0_wp / -3.0_wp) )
+    call test("+5/3*4+3/2",        5.0_wp/3.0_wp*4.0_wp+3.0_wp/2.0_wp)
     call test("57/311*433+39/27", 57.0_wp/311.0_wp*433.0_wp+39.0_wp/27.0_wp)
     call test("2/3*4+3/2",         2.0_wp/3.0_wp*4.0_wp+3.0_wp/2.0_wp)
 
@@ -101,7 +107,7 @@ contains
         real(wp), parameter :: eps = epsilon(1.0_wp) * 10
         real(wp) :: value
         real(wp) :: expected
-        if ((value - expected) > eps) then
+        if (abs(value - expected) > eps) then
            write(error_unit,'("Expected ",g0," but found ",g0)') expected, value
            error stop
         end if
@@ -115,7 +121,7 @@ contains
         ret = p % parse(string)
         select type(ret => ret % object)
         type is (fraction_t)
-            print*, string, '=', ret
+            print '(A20," = ",sp,g0," = ",DT)', string, ret % as_decimal(), ret
             call assert_equal(value, ret % as_decimal())
         end select
     end subroutine
@@ -134,22 +140,27 @@ contains
         if (info == 0) ans % object = fraction_t(value,1)
     end function
 
-    function on_function(self, fun, arg) result(ans)
+    function on_unary(self, opr, arg) result(ans)
         class(parser_t) :: self
-        type(token_t) :: fun
+        type(token_t) :: opr 
         type(token_t) :: arg
         type(token_t) :: ans
 
         select type(arg => arg % object)
         type is (real)
-            select case(fun % string)
-            case('sqrt'); ans % object = sqrt(arg)
-            case('sin');  ans % object = sin(arg)
+            select case(opr % string)
+            case('-');    ans % object = -(arg)
+            case('+');    ans % object = +(arg)
+            end select
+        type is (fraction_t)
+            select case(opr % string)
+            case('-');    ans % object = fraction_t(-1,1) * (arg)
+            case('+');    ans % object = fraction_t(+1,1) * (arg)
             end select
         end select
     end function
 
-    function on_operator(self, lhs, opr, rhs) result(ans)
+    function on_binary(self, lhs, opr, rhs) result(ans)
         class(parser_t) :: self
         type(token_t) :: opr
         type(token_t) :: lhs

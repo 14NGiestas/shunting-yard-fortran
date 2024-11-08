@@ -12,14 +12,16 @@ program main
     type(parser_t) :: p
     type(token_t) :: ret
 
+    call p % register_unary(   ["-   ", "+   "])
     call p % register_function(["sin ", "sqrt"])
-    call p % register_operator(["+ ","- ","* ","/ "])
-    call p % register_operator(["**", "^ "], is_right_assoc=.true.)
+    call p % register_operator(["**  ", "^   "], is_right_assoc=.true.)
+    call p % register_operator(["+   ", "-   ",&
+                                "*   ", "/   "])
     call p % ignore_tokens([" ", "&", new_line(' ')])
 
-    p % on_operator => on_operator
-    p % on_function => on_function
-    p % on_operand  => on_operand
+    p % on_unary   => on_unary
+    p % on_binary  => on_binary
+    p % on_operand => on_operand
 
     write(*,'(1000(" "))')
     write(*,'("FORTRAN BC - Example of program using the expression parser")')
@@ -63,7 +65,7 @@ contains
         end select
     end function
 
-    function on_function(self, fun, arg) result(ans)
+    function on_unary(self, fun, arg) result(ans)
         class(parser_t) :: self
         type(token_t) :: fun
         type(token_t) :: arg
@@ -74,12 +76,14 @@ contains
             select case(fun % string)
             case('sqrt'); ans % object = sqrt(arg)
             case('sin');  ans % object = sin(arg)
+            case('-');    ans % object = -(arg)
+            case('+');    ans % object = +(arg)
             end select
         end select
 
     end function
 
-    function on_operator(self, lhs, opr, rhs) result(ans)
+    function on_binary(self, lhs, opr, rhs) result(ans)
         class(parser_t) :: self
         type(token_t) :: opr
         type(token_t) :: lhs
