@@ -14,7 +14,7 @@ program main
 
     call p % register_function(["sin ", "sqrt"])
     call p % register_operator(["+ ","- ","* ","/ "])
-    call p % register_operator(["**"], is_right_assoc=.true.)
+    call p % register_operator(["**", "^ "], is_right_assoc=.true.)
     call p % ignore_tokens([" ", "&", new_line(' ')])
 
     p % on_operator => on_operator
@@ -54,7 +54,11 @@ contains
             integer :: info
             real :: value
             read(opr % string,*,iostat=info) value
-            if (info == 0) ans % object = value
+            if (info == 0) then
+                ans % object = value
+            else
+                error stop "Unknown value " // opr % string
+            end if
         end block
         end select
     end function
@@ -91,6 +95,7 @@ contains
                 case('-'); ans % object = lhs-rhs
                 case('*'); ans % object = lhs*rhs
                 case('/'); ans % object = lhs/rhs
+                case('^'); ans % object = lhs**rhs
                 case('**'); ans % object = lhs**rhs
                 end select
             end select

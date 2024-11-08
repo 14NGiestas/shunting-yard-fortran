@@ -1,42 +1,53 @@
 module derived_type
+    use iso_fortran_env
+    integer, parameter :: wp = REAL64
 
-    type :: aritimetic_t
+    type :: fraction_t
         integer :: numerator
         integer :: denominator
     contains
+        procedure :: as_decimal
         procedure :: multiply
         procedure :: subtract
         procedure :: addition
         procedure :: division
+        procedure :: write
         generic :: operator(+) => addition
         generic :: operator(-) => subtract
         generic :: operator(*) => multiply
         generic :: operator(/) => division
+        generic :: write(formatted) => write
     end type
 
 contains
 
+    real(wp) pure function as_decimal(self)
+        class(fraction_t), intent(in) :: self
+        as_decimal = real(self % numerator,wp) &
+                   / real(self % denominator,wp)
+    end function
+
     function multiply(lhs, rhs) result(ans)
-        class(aritimetic_t), intent(in) :: lhs
-        type(aritimetic_t),  intent(in) :: rhs
-        type(aritimetic_t)              :: ans
+        class(fraction_t), intent(in) :: lhs
+        type(fraction_t),  intent(in) :: rhs
+        type(fraction_t)              :: ans
         ans % numerator   = lhs % numerator   * rhs % numerator
         ans % denominator = lhs % denominator * rhs % denominator
     end function
 
     function division(lhs, rhs) result(ans)
-        class(aritimetic_t), intent(in) :: lhs
-        type(aritimetic_t),  intent(in) :: rhs
-        type(aritimetic_t)              :: ans
+        class(fraction_t), intent(in) :: lhs
+        type(fraction_t),  intent(in) :: rhs
+        type(fraction_t)              :: ans
 
         ans % numerator   = lhs % numerator   * rhs % denominator
         ans % denominator = lhs % denominator * rhs % numerator
     end function
 
     function addition(lhs, rhs) result(ans)
-        class(aritimetic_t), intent(in) :: lhs
-        type(aritimetic_t),  intent(in) :: rhs
-        type(aritimetic_t)              :: ans
+        class(fraction_t), intent(in) :: lhs
+        type(fraction_t),  intent(in) :: rhs
+        type(fraction_t)              :: ans
 
         ans % numerator   = lhs % numerator   * rhs % denominator &
                           + lhs % denominator * rhs % numerator
@@ -44,25 +55,35 @@ contains
     end function
 
     function subtract(lhs, rhs) result(ans)
-        class(aritimetic_t), intent(in) :: lhs
-        type(aritimetic_t),  intent(in) :: rhs
-        type(aritimetic_t)              :: ans
+        class(fraction_t), intent(in) :: lhs
+        type(fraction_t),  intent(in) :: rhs
+        type(fraction_t)              :: ans
 
         ans % numerator   = lhs % numerator   * rhs % denominator &
                           - lhs % denominator * rhs % numerator
         ans % denominator = lhs % denominator * rhs % denominator
     end function
 
+    subroutine write(self, unit, iotype, v_list, iostat, iomsg)
+        class(fraction_t), intent(in)    :: self
+        integer,           intent(in)    :: unit
+        character(*),      intent(in)    :: iotype
+        integer,           intent(in)    :: v_list(:)
+        integer,           intent(out)   :: iostat
+        character(*),      intent(inout) :: iomsg
+        write(unit,'(g0,"/",g0)',iostat=iostat) &
+           self % numerator, &
+           self % denominator
+    end subroutine
+
 end module
 
 program test_derived_type
     use parser_module
     use derived_type
-    use iso_fortran_env
     implicit none
 
     type(parser_t) :: p
-    type(token_t), allocatable :: ret
 
     call p % register_operator(["+","-","*","/"])
 
@@ -70,37 +91,34 @@ program test_derived_type
     p % on_function => on_function
     p % on_operand  => on_operand
 
-    print*, "5/3*4+3/2"
-    ret = p % parse("5/3*4+3/2")
-    select type(ret => ret % object)
-    type is (aritimetic_t)
-        print*, ret
-        print*, real(ret % numerator,   kind=REAL64) &
-              / real(ret % denominator, kind=REAL64)
-        print*, 5.0d0/3.0d0*4.0d0+3.0d0/2.0d0
-    end select
-
-    print*, "57/311*433+39/27"
-    ret = p % parse("57/311*433+39/27")
-    select type(ret => ret % object)
-    type is (aritimetic_t)
-        print*, ret
-        print*, real(ret % numerator,   kind=REAL64) &
-              / real(ret % denominator, kind=REAL64)
-        print*, 57.d0/311.d0*433.d0+39.d0/27.d0
-    end select
-
-    print*, "2/3*4+3/2"
-    ret = p % parse("2/3*4+3/2")
-    select type(ret => ret % object)
-    type is (aritimetic_t)
-        print*, ret
-        print*, real(ret % numerator,   kind=REAL64) &
-              / real(ret % denominator, kind=REAL64)
-        print*, 2.0d0/3.0d0*4.0d0+3.0d0/2.0d0
-    end select
+    call test("5/3*4+3/2",         5.0_wp/3.0_wp*4.0_wp+3.0_wp/2.0_wp)
+    call test("57/311*433+39/27", 57.0_wp/311.0_wp*433.0_wp+39.0_wp/27.0_wp)
+    call test("2/3*4+3/2",         2.0_wp/3.0_wp*4.0_wp+3.0_wp/2.0_wp)
 
 contains
+
+    subroutine assert_equal(expected, value)
+        real(wp), parameter :: eps = epsilon(1.0_wp) * 10
+        real(wp) :: value
+        real(wp) :: expected
+        if ((value - expected) > eps) then
+           write(error_unit,'("Expected ",g0," but found ",g0)') expected, value
+           error stop
+        end if
+    end subroutine
+
+    subroutine test(string, value)
+        character(*) :: string
+        real(wp) :: value
+        type(token_t), allocatable :: ret
+
+        ret = p % parse(string)
+        select type(ret => ret % object)
+        type is (fraction_t)
+            print*, string, '=', ret
+            call assert_equal(value, ret % as_decimal())
+        end select
+    end subroutine
 
     function on_operand(self, opr) result(ans)
         class(parser_t) :: self
@@ -109,11 +127,11 @@ contains
 
         integer :: info
         integer :: value
-        type(aritimetic_t) :: fract
+        type(fraction_t) :: fract
 
         read(opr % string,*,iostat=info) value
 
-        if (info == 0) ans % object = aritimetic_t(value,1)
+        if (info == 0) ans % object = fraction_t(value,1)
     end function
 
     function on_function(self, fun, arg) result(ans)
@@ -139,9 +157,9 @@ contains
         type(token_t) :: ans
 
         select type(lhs => lhs % object)
-        type is (aritimetic_t)
+        type is (fraction_t)
             select type(rhs => rhs % object)
-            type is (aritimetic_t)
+            type is (fraction_t)
                 select case(opr % string)
                 case('+'); ans % object = lhs+rhs
                 case('-'); ans % object = lhs-rhs
