@@ -282,7 +282,7 @@ contains
     logical function is_alphanum(input)
         character, intent(in) :: input
         is_alphanum = scan(input, "abcdefghijklmnopqrstuvwxyz_"//&
-                                  "ABCDEFGUIJKLMNOPQRSTUVWXYZ."//&
+                                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ."//&
                                   "0123456789") > 0
     end function
 
